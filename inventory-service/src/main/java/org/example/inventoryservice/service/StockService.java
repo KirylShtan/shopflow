@@ -3,6 +3,7 @@ package org.example.inventoryservice.service;
 import org.example.inventoryservice.dto.CreateStockRequest;
 import org.example.inventoryservice.dto.StockResponse;
 import org.example.inventoryservice.dto.UpdateStockRequest;
+import org.example.inventoryservice.event.OrderItemEvent;
 import org.example.inventoryservice.exception.DuplicateStockException;
 import org.example.inventoryservice.exception.StockNotFoundException;
 import org.example.inventoryservice.model.Stock;
@@ -57,6 +58,27 @@ public class StockService {
         Stock stock = stockRepository.findByProductId(productId).orElseThrow(
                 () -> new StockNotFoundException(productId));
         stockRepository.delete(stock);
+    }
+
+    @Transactional
+    public void reserve(Long productId, Integer quantity) {
+        Stock stock = stockRepository.findByProductId(productId).orElseThrow(
+                () -> new StockNotFoundException(productId));
+        if (stock.getQuantity() < quantity) {
+            throw new IllegalArgumentException(
+                    "Not enough stock for productId: " + productId
+                    + ", need= " + quantity
+                    + ", have-=" + stock.getQuantity());
+
+        }
+        stock.setQuantity(stock.getQuantity() - quantity);
+    }
+
+    @Transactional
+    public void reserveAll(List<OrderItemEvent> items) {
+        for (OrderItemEvent item : items) {
+            reserve(item.productId(), item.quantity());
+        }
     }
 
     private StockResponse toResponse(Stock stock){

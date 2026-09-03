@@ -5,6 +5,7 @@ import org.example.orderservice.dto.OrderItemRequest;
 import org.example.orderservice.dto.OrderItemResponse;
 import org.example.orderservice.dto.OrderResponse;
 import org.example.orderservice.exception.OrderNotFoundException;
+import org.example.orderservice.kafka.OrderEventPublisher;
 import org.example.orderservice.model.Order;
 import org.example.orderservice.model.OrderItem;
 import org.example.orderservice.model.OrderStatus;
@@ -19,9 +20,12 @@ import java.util.List;
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final OrderEventPublisher orderEventPublisher;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(OrderRepository orderRepository,
+                        OrderEventPublisher orderEventPublisher) {
         this.orderRepository = orderRepository;
+        this.orderEventPublisher = orderEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +60,9 @@ public class OrderService {
             orderItem.setQuantity(item.quantity());
             order.addItem(orderItem);
         }
-        return toResponse(orderRepository.save(order));
+        Order saved = orderRepository.save(order);
+        orderEventPublisher.publishOrderCreated(saved);
+        return toResponse(saved);
     }
 
     @Transactional
@@ -68,6 +74,26 @@ public class OrderService {
         }
         order.setStatus(OrderStatus.CANCELLED);
         return toResponse(order);
+    }
+
+    @Transactional
+    public void confirm(Long orderId){
+        Order order = orderRepository.findById(orderId).orElseThrow(
+                () -> new OrderNotFoundException(orderId));
+        if (order.getStatus() != OrderStatus.NEW) {
+            return;
+        }
+        order.setStatus(OrderStatus.CONFIRMED);
+    }
+
+    @Transactional
+    public void markFailed(Long orderId){
+        Order order = orderRepository.findById(orderId).orElseThrow(
+                () -> new OrderNotFoundException(orderId));
+        if (order.getStatus() != OrderStatus.NEW) {
+            return;
+        }
+        order.setStatus(OrderStatus.CANCELLED);
     }
 
     private OrderResponse toResponse(Order order) {

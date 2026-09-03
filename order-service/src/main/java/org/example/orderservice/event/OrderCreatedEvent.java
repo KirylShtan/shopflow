@@ -1,4 +1,6 @@
 package org.example.orderservice.event;
 
-public record OrderCreatedEvent() {
+import java.util.List;
+
+public record OrderCreatedEvent(Long orderId, List<OrderItemEvent> items) {
 }

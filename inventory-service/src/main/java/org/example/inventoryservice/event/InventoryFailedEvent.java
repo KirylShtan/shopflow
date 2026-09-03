@@ -1,4 +1,4 @@
 package org.example.inventoryservice.event;
 
-public record InventoryFailedEvent() {
+public record InventoryFailedEvent(Long orderId, String reason) {
 }

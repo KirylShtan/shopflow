@@ -1,4 +1,4 @@
 package org.example.inventoryservice.event;
 
-public record InventoryReservedEvent() {
+public record InventoryReservedEvent(Long orderId) {
 }
