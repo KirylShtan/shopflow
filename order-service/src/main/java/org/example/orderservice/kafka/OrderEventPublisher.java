@@ -1,5 +1,7 @@
 package org.example.orderservice.kafka;
 
+import org.example.orderservice.event.OrderCancelledEvent;
+import org.example.orderservice.event.OrderConfirmedEvent;
 import org.example.orderservice.event.OrderCreatedEvent;
 import org.example.orderservice.event.OrderItemEvent;
 import org.example.orderservice.model.Order;
@@ -25,6 +27,19 @@ public class OrderEventPublisher {
 
         kafkaTemplate.send(KafkaTopics.ORDER_CREATED, order.getId().toString(),event );
 
+    }
+
+    public void publishOrderConfirmed(Long orderId){
+        kafkaTemplate.send(KafkaTopics.ORDER_CONFIRMED, orderId.toString(),
+                new OrderConfirmedEvent(orderId));
+    }
+
+    public void publishOrderCancelled(Long orderId){
+        kafkaTemplate.send(
+                KafkaTopics.ORDER_CANCELLED,
+                orderId.toString(),
+                new OrderCancelledEvent(orderId)
+        );
     }
 
 }

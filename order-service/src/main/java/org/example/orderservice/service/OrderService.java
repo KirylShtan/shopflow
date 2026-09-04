@@ -84,6 +84,7 @@ public class OrderService {
             return;
         }
         order.setStatus(OrderStatus.CONFIRMED);
+        orderEventPublisher.publishOrderConfirmed(orderId);
     }
 
     @Transactional
@@ -94,6 +95,7 @@ public class OrderService {
             return;
         }
         order.setStatus(OrderStatus.CANCELLED);
+        orderEventPublisher.publishOrderCancelled(orderId);
     }
 
     private OrderResponse toResponse(Order order) {

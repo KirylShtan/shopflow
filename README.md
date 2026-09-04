@@ -1,23 +1,21 @@
 # ShopFlow
 
-Microservices-based online shop backend. Each service owns its database and exposes a REST API. Order and inventory are connected asynchronously via Kafka.
+Microservices-based online shop backend. Each service owns its database (where needed) and exposes a REST API. Services communicate asynchronously via Kafka.
 
 ## Architecture
 
 ```
-┌─────────────────┐   ┌──────────────────┐   ┌─────────────────┐
-│ catalog-service │   │ inventory-service │   │  order-service  │
-│     :8085       │   │      :8086        │   │     :8087       │
-└────────┬────────┘   └─────────┬─────────┘   └────────┬────────┘
-         │                      │                      │
-         ▼                      ▼                      ▼
-   catalog-db              inventory-db             order-db
-     :5433                    :5431                  :5434
-                              ▲                      │
-                              │      Kafka :9092     │
-                              └──────────────────────┘
-                         order.created
-                         inventory.reserved / failed
+┌──────────────┐  ┌────────────────┐  ┌───────────────┐  ┌─────────────────────┐
+│   catalog    │  │   inventory    │  │     order     │  │    notification     │
+│    :8085     │  │     :8086      │  │     :8087     │  │        :8088        │
+└──────┬───────┘  └───────┬────────┘  └───────┬───────┘  └──────────┬──────────┘
+       │                  │                   │                     │
+       ▼                  ▼                   ▼                     │
+  catalog-db         inventory-db          order-db                 │
+    :5433               :5431                :5434                  │
+                      ▲                   │                         │
+                      │    Kafka :9092    │                         │
+                      └───────────────────┴─────────────────────────┘
 ```
 
 | Service | Port | Database | Responsibility |
@@ -25,24 +23,25 @@ Microservices-based online shop backend. Each service owns its database and expo
 | **catalog-service** | 8085 | `catalog` (5433) | Products (name, price) |
 | **inventory-service** | 8086 | `inventory` (5431) | Stock levels by `productId` |
 | **order-service** | 8087 | `orders` (5434) | Orders and line items |
-| **Kafka** | 9092 | — | Async events between order and inventory |
-
-Services are loosely coupled via `productId` (no cross-service JPA relations).
+| **notification-service** | 8088 | — | Listens to order events, logs notifications |
+| **Kafka** | 9092 | — | Async messaging |
 
 ## Kafka flow
 
 ```
 POST /api/orders
-  → order saved as NEW
-  → publish OrderCreated (topic: order.created)
+  → order NEW → order.created
 
-inventory consumes OrderCreated
-  → reserve stock
-  → publish InventoryReserved (inventory.reserved)
-     or InventoryFailed (inventory.failed)
+inventory: reserve stock
+  → inventory.reserved  or  inventory.failed
+  → on technical failure after retries → order.created-dlt
 
-order consumes result
-  → CONFIRMED or CANCELLED
+order:
+  → CONFIRMED → order.confirmed
+  → CANCELLED → order.cancelled
+
+notification:
+  → EMAIL log for confirmed / cancelled
 ```
 
 ## Tech stack
@@ -63,22 +62,17 @@ order consumes result
 
 ### 1. Start infrastructure
 
-From the repository root:
-
 ```bash
 docker compose up -d
 ```
 
-Starts three Postgres instances and Kafka on `:9092`.
-
 ### 2. Run services
-
-Open each service as a separate project and start the Spring Boot application, or from the command line:
 
 ```bash
 cd catalog-service && ./mvnw spring-boot:run
 cd inventory-service && ./mvnw spring-boot:run
 cd order-service && ./mvnw spring-boot:run
+cd notification-service && ./mvnw spring-boot:run
 ```
 
 On Windows use `mvnw.cmd` instead of `./mvnw`.
@@ -133,18 +127,23 @@ POST /api/orders
 
 Order statuses: `NEW` → `CONFIRMED` or `CANCELLED` (via Kafka).
 
+### Notification — `http://localhost:8088`
+
+No public business API. Consumes `order.confirmed` / `order.cancelled` and writes notification logs.
+
 ## Example flow
 
 1. Create a product in **catalog-service**.
 2. Add stock for the same `productId` in **inventory-service**.
 3. Create an order in **order-service**.
-4. Immediately the response status is `NEW`.
-5. After ~1–2 seconds `GET /api/orders/{id}` shows `CONFIRMED` (enough stock) or `CANCELLED` (not enough / missing stock). Stock quantity decreases only on success.
+4. Response status is immediately `NEW`.
+5. After ~1–2 seconds: order is `CONFIRMED` or `CANCELLED`, stock updates on success, notification-service logs an EMAIL line.
 
 ## Roadmap
 
 - [x] Kafka: `OrderCreated` → inventory reserves stock → order `CONFIRMED` / `CANCELLED`
-- [ ] Dead Letter Topic
+- [x] Dead Letter Topic (`*-dlt`)
+- [x] notification-service
 - [ ] API Gateway
 - [ ] Docker images for services
 - [ ] CI/CD
@@ -156,6 +155,7 @@ shopflow/
 ├── catalog-service/
 ├── inventory-service/
 ├── order-service/
+├── notification-service/
 ├── docker-compose.yml
 └── README.md
 ```

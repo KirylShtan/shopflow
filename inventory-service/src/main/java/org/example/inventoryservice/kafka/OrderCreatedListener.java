@@ -27,6 +27,7 @@ public class OrderCreatedListener {
     @KafkaListener(topics = KafkaTopics.ORDER_CREATED)
     public void onOrderCreated(OrderCreatedEvent event) {
         logger.info("Received OrderCreated: orderId={}, items={}", event.orderId(), event.items());
+
         try{
             stockService.reserveAll(event.items());
             kafkaTemplate.send(
