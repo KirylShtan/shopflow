@@ -1,25 +1,29 @@
 # ShopFlow
 
-Microservices-based online shop backend. Each service owns its database (where needed) and exposes a REST API. Services communicate asynchronously via Kafka.
+Microservices-based online shop backend. Each service owns its database (where needed). Clients enter through an API Gateway. Services communicate asynchronously via Kafka.
 
 ## Architecture
 
 ```
-┌──────────────┐  ┌────────────────┐  ┌───────────────┐  ┌─────────────────────┐
-│   catalog    │  │   inventory    │  │     order     │  │    notification     │
-│    :8085     │  │     :8086      │  │     :8087     │  │        :8088        │
-└──────┬───────┘  └───────┬────────┘  └───────┬───────┘  └──────────┬──────────┘
-       │                  │                   │                     │
-       ▼                  ▼                   ▼                     │
-  catalog-db         inventory-db          order-db                 │
-    :5433               :5431                :5434                  │
-                      ▲                   │                         │
-                      │    Kafka :9092    │                         │
-                      └───────────────────┴─────────────────────────┘
+                         ┌─────────────────┐
+                         │ gateway-service │
+                         │     :8080       │
+                         └────────┬────────┘
+            ┌─────────────────────┼─────────────────────┐
+            ▼                     ▼                     ▼
+     catalog :8085         inventory :8086         order :8087
+            │                     │                     │
+            ▼                     ▼                     ▼
+       catalog-db            inventory-db           order-db
+         :5433                  :5431                 :5434
+                              ▲                   │
+                              │    Kafka :9092    │
+                              └───────────────────┴──────────► notification :8088
 ```
 
 | Service | Port | Database | Responsibility |
 |---------|------|----------|----------------|
+| **gateway-service** | 8080 | — | API Gateway (routing) |
 | **catalog-service** | 8085 | `catalog` (5433) | Products (name, price) |
 | **inventory-service** | 8086 | `inventory` (5431) | Stock levels by `productId` |
 | **order-service** | 8087 | `orders` (5434) | Orders and line items |
@@ -29,7 +33,7 @@ Microservices-based online shop backend. Each service owns its database (where n
 ## Kafka flow
 
 ```
-POST /api/orders
+POST /api/orders (via gateway :8080)
   → order NEW → order.created
 
 inventory: reserve stock
@@ -47,39 +51,46 @@ notification:
 ## Tech stack
 
 - Java 21
-- Spring Boot 4.1
+- Spring Boot 4.1 (gateway on Boot 4.0 + Spring Cloud Gateway)
 - PostgreSQL 17
 - Apache Kafka 3.9 (KRaft)
-- Docker Compose (databases + Kafka)
+- Docker Compose (databases, Kafka, and all services)
 
 ## Prerequisites
 
-- JDK 21
+- JDK 21 (only if running services locally without Docker)
 - Docker & Docker Compose
-- Maven (or use `./mvnw` in each service)
+- Maven / `./mvnw` (local runs)
 
 ## Getting started
 
-### 1. Start infrastructure
+### Option A — full stack in Docker (recommended)
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-### 2. Run services
+Then use the gateway:
+
+```text
+http://localhost:8080/api/products
+http://localhost:8080/api/stock
+http://localhost:8080/api/orders
+```
+
+### Option B — infrastructure in Docker, apps in IDE
 
 ```bash
-cd catalog-service && ./mvnw spring-boot:run
-cd inventory-service && ./mvnw spring-boot:run
-cd order-service && ./mvnw spring-boot:run
-cd notification-service && ./mvnw spring-boot:run
+docker compose up -d catalog-db inventory-db order-db kafka
 ```
 
-On Windows use `mvnw.cmd` instead of `./mvnw`.
+Run each Spring Boot app locally (without `SPRING_PROFILES_ACTIVE=docker`).
 
-## API
+## API (through gateway)
 
-### Catalog — `http://localhost:8085`
+Base URL: `http://localhost:8080`
+
+### Catalog
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -92,7 +103,7 @@ POST /api/products
 { "name": "Laptop", "price": 999.99 }
 ```
 
-### Inventory — `http://localhost:8086`
+### Inventory
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -107,7 +118,7 @@ POST /api/stock
 { "productId": 1, "quantity": 50 }
 ```
 
-### Orders — `http://localhost:8087`
+### Orders
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -127,31 +138,32 @@ POST /api/orders
 
 Order statuses: `NEW` → `CONFIRMED` or `CANCELLED` (via Kafka).
 
-### Notification — `http://localhost:8088`
+### Notification
 
 No public business API. Consumes `order.confirmed` / `order.cancelled` and writes notification logs.
 
 ## Example flow
 
-1. Create a product in **catalog-service**.
-2. Add stock for the same `productId` in **inventory-service**.
-3. Create an order in **order-service**.
+1. `POST /api/products` via gateway.
+2. `POST /api/stock` for the same `productId`.
+3. `POST /api/orders`.
 4. Response status is immediately `NEW`.
-5. After ~1–2 seconds: order is `CONFIRMED` or `CANCELLED`, stock updates on success, notification-service logs an EMAIL line.
+5. After ~1–2 seconds: order is `CONFIRMED` or `CANCELLED`, stock updates on success, notification logs an EMAIL line.
 
 ## Roadmap
 
 - [x] Kafka: `OrderCreated` → inventory reserves stock → order `CONFIRMED` / `CANCELLED`
 - [x] Dead Letter Topic (`*-dlt`)
 - [x] notification-service
-- [ ] API Gateway
-- [ ] Docker images for services
+- [x] API Gateway
+- [x] Docker images for services
 - [ ] CI/CD
 
 ## Project structure
 
 ```
 shopflow/
+├── gateway-service/
 ├── catalog-service/
 ├── inventory-service/
 ├── order-service/
@@ -161,3 +173,4 @@ shopflow/
 ```
 
 Each service is an independent Maven project (separate IntelliJ window).
+Docker profile: `application-docker.properties` / `application-docker.yml`.

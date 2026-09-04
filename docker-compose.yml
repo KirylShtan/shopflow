@@ -62,3 +62,63 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  catalog-service:
+    build: ./catalog-service
+    container_name: shopflow-catalog
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: shopflow-inventory
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  order-service:
+    build: ./order-service
+    container_name: shopflow-order
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      order-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  notification-service:
+    build: ./notification-service
+    container_name: shopflow-notification
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      kafka:
+        condition: service_started
+
+  gateway-service:
+    build: ./gateway-service
+    container_name: shopflow-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      - catalog-service
+      - inventory-service
+      - order-service
