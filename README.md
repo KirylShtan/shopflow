@@ -157,7 +157,7 @@ No public business API. Consumes `order.confirmed` / `order.cancelled` and write
 - [x] notification-service
 - [x] API Gateway
 - [x] Docker images for services
-- [ ] CI/CD
+- [x] CI/CD (Jenkinsfile: parallel `mvn test` + package)
 
 ## Project structure
 
