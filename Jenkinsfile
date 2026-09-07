@@ -11,64 +11,27 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '10'))
   }
 
+  // Jenkins Windows service runs as SYSTEM → default ~/.m2 is under
+  // C:\WINDOWS\system32\config\systemprofile and parallel builds hit AccessDenied.
+  // Keep Maven cache in the job workspace instead.
+  environment {
+    MAVEN_REPO = "${env.WORKSPACE}\\.m2\\repository"
+  }
+
   stages {
     stage('Test') {
-      parallel {
-        stage('catalog-service') {
-          steps {
-            dir('catalog-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B clean test
-              '''
-            }
-          }
-        }
-        stage('inventory-service') {
-          steps {
-            dir('inventory-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B clean test
-              '''
-            }
-          }
-        }
-        stage('order-service') {
-          steps {
-            dir('order-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B clean test
-              '''
-            }
-          }
-        }
-        stage('notification-service') {
-          steps {
-            dir('notification-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B clean test
-              '''
-            }
-          }
-        }
-        stage('gateway-service') {
-          steps {
-            dir('gateway-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B clean test
-              '''
-            }
-          }
-        }
+      steps {
+        bat '''
+          @echo off
+          set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
+          for %%S in (catalog-service inventory-service order-service notification-service gateway-service) do (
+            echo ========== TEST %%S ==========
+            pushd %%S
+            call mvnw.cmd -B clean test -Dmaven.repo.local=%MAVEN_REPO%
+            if errorlevel 1 exit /b 1
+            popd
+          )
+        '''
       }
       post {
         always {
@@ -78,62 +41,18 @@ pipeline {
     }
 
     stage('Package') {
-      parallel {
-        stage('catalog-service') {
-          steps {
-            dir('catalog-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B package -DskipTests
-              '''
-            }
-          }
-        }
-        stage('inventory-service') {
-          steps {
-            dir('inventory-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B package -DskipTests
-              '''
-            }
-          }
-        }
-        stage('order-service') {
-          steps {
-            dir('order-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B package -DskipTests
-              '''
-            }
-          }
-        }
-        stage('notification-service') {
-          steps {
-            dir('notification-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B package -DskipTests
-              '''
-            }
-          }
-        }
-        stage('gateway-service') {
-          steps {
-            dir('gateway-service') {
-              bat '''
-                @echo off
-                set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
-                call mvnw.cmd -B package -DskipTests
-              '''
-            }
-          }
-        }
+      steps {
+        bat '''
+          @echo off
+          set "PATH=C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;%PATH%"
+          for %%S in (catalog-service inventory-service order-service notification-service gateway-service) do (
+            echo ========== PACKAGE %%S ==========
+            pushd %%S
+            call mvnw.cmd -B package -DskipTests -Dmaven.repo.local=%MAVEN_REPO%
+            if errorlevel 1 exit /b 1
+            popd
+          )
+        '''
       }
     }
   }
