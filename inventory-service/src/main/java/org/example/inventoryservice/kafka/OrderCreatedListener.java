@@ -29,7 +29,15 @@ public class OrderCreatedListener {
         logger.info("Received OrderCreated: orderId={}, items={}", event.orderId(), event.items());
 
         try{
-            stockService.reserveAll(event.items());
+            boolean reserved = stockService.reserveForOrder(event.orderId(), event.items());
+            if(!reserved){
+                logger.info("Duplicate OrderCreated, skip reserve. orderId={}", event.orderId());
+                kafkaTemplate.send(KafkaTopics.INVENTORY_RESERVED,
+                        event.orderId().toString(),
+                        new InventoryReservedEvent(event.orderId()));
+                return;
+            }
+
             kafkaTemplate.send(
                     KafkaTopics.INVENTORY_RESERVED,
                     event.orderId().toString(),

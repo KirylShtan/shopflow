@@ -6,7 +6,9 @@ import org.example.inventoryservice.dto.UpdateStockRequest;
 import org.example.inventoryservice.event.OrderItemEvent;
 import org.example.inventoryservice.exception.DuplicateStockException;
 import org.example.inventoryservice.exception.StockNotFoundException;
+import org.example.inventoryservice.model.ProcessedOrder;
 import org.example.inventoryservice.model.Stock;
+import org.example.inventoryservice.repository.ProcessedOrderRepository;
 import org.example.inventoryservice.repository.StockRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +19,12 @@ import java.util.List;
 public class StockService {
 
     private final StockRepository stockRepository;
+    private final ProcessedOrderRepository processedOrderRepository;
 
-    public StockService(StockRepository stockRepository) {
+    public StockService(StockRepository stockRepository,
+                        ProcessedOrderRepository processedOrderRepository) {
         this.stockRepository = stockRepository;
+        this.processedOrderRepository = processedOrderRepository;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +84,16 @@ public class StockService {
         for (OrderItemEvent item : items) {
             reserve(item.productId(), item.quantity());
         }
+    }
+
+    @Transactional
+    public boolean reserveForOrder(Long orderId, List<OrderItemEvent> items) {
+        if (processedOrderRepository.existsById(orderId)) {
+            return false;
+        }
+        reserveAll(items);
+        processedOrderRepository.save(new ProcessedOrder(orderId));
+        return true;
     }
 
     private StockResponse toResponse(Stock stock){
